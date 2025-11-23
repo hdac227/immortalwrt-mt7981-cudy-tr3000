@@ -121,12 +121,14 @@ jobs:
           sed -i '/CONFIG_PACKAGE_kmod-nft-tproxy/d' .config
           sed -i '/CONFIG_PACKAGE_kmod-nfnetlink-queue/d' .config
           sed -i '/CONFIG_PACKAGE_kmod-ipt-nfqueue/d' .config
+          sed -i '/CONFIG_PACKAGE_iptables-mod-nfqueue/d' .config
           
           # 显式启用 (使用 =y 编译进固件，确保万无一失)
           echo "CONFIG_PACKAGE_kmod-nft-queue=y" >> .config
           echo "CONFIG_PACKAGE_kmod-nft-tproxy=y" >> .config
           echo "CONFIG_PACKAGE_kmod-nfnetlink-queue=y" >> .config
           echo "CONFIG_PACKAGE_kmod-ipt-nfqueue=y" >> .config
+          echo "CONFIG_PACKAGE_iptables-mod-nfqueue=y" >> .config
 
           echo "🔄 Running make defconfig to fix dependencies..."
           make defconfig
