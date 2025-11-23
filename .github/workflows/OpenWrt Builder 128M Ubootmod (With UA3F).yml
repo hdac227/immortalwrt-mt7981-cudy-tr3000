@@ -48,18 +48,22 @@ jobs:
 
       - name: 🧩 Load Configuration & Fix Dependencies
         run: |
-          cd openwrt
-          # 如果你有自定义 config 文件，请取消下面注释并上传
-          # mv $GITHUB_WORKSPACE/config/128muboot.config .config
-          
-          # 如果没有自定义 config，这里生成默认配置 (针对 MT798x)
-          # 注意：你需要确认你的具体设备型号，这里假设是默认 target，如果不是，请先加载你的 config
-          # 为了演示，这里假设你已经有了一个 .config 或者使用默认
+          # --- 修复部分开始 ---
+          # 1. 先在根目录下处理 files 文件夹 (不要先 cd openwrt)
+          # 如果仓库里有 files 文件夹，把它移动到 openwrt 源码目录下的 files 文件夹中
           [ -e files ] && mv files openwrt/files
+          
+          # 2. 如果你有自定义 config 文件 (config/128muboot.config)，移动它
+          # 注意：这里假设你的 config 文件在 config/ 目录下，请根据实际情况调整
+          [ -e $CONFIG_FILE ] && mv $CONFIG_FILE openwrt/.config
+          
+          # 3. 现在才进入 openwrt 目录
+          cd openwrt
+          # --- 修复部分结束 ---
 
           echo "🔧 Modifying .config..."
           
-          # 1. 禁用 ebtables (解决编译报错)
+          # 4. 禁用 ebtables (解决编译报错)
           sed -i '/CONFIG_PACKAGE_ebtables/d' .config
           sed -i '/CONFIG_PACKAGE_kmod-ebtables/d' .config
           echo "# CONFIG_PACKAGE_ebtables is not set" >> .config
@@ -67,17 +71,17 @@ jobs:
           echo "# CONFIG_PACKAGE_ebtables-utils is not set" >> .config
           echo "# CONFIG_PACKAGE_kmod-ebtables is not set" >> .config
 
-          # 2. 直接启用 UA3F (编译进固件)
+          # 5. 直接启用 UA3F (编译进固件)
           # 这会自动触发 kmod-nft-queue 和 kmod-nft-tproxy 的选中
           sed -i '/CONFIG_PACKAGE_ua3f/d' .config
           echo "CONFIG_PACKAGE_ua3f=y" >> .config
           
-          # 3. 强制选中依赖模块 (作为双重保险，设为 =y)
+          # 6. 强制选中依赖模块 (作为双重保险，设为 =y)
           echo "CONFIG_PACKAGE_kmod-nft-queue=y" >> .config
           echo "CONFIG_PACKAGE_kmod-nft-tproxy=y" >> .config
           echo "CONFIG_PACKAGE_kmod-nfnetlink-queue=y" >> .config
 
-          # 4. 让 OpenWrt 自动计算并修复剩余依赖
+          # 7. 让 OpenWrt 自动计算并修复剩余依赖
           make defconfig
 
       - name: 📝 Check Config
