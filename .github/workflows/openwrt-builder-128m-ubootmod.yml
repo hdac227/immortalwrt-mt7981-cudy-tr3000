@@ -97,10 +97,7 @@ jobs:
           chmod +x $DIY_P2_SH
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
-
-      # =======================================================
-      # 👇👇👇 这里是修改的核心部分 👇👇👇
-      # =======================================================
+        
       - name: 🔧 Customize Configuration (Fix ebtables & Enable UA3F)
         run: |
           cd openwrt
@@ -123,20 +120,16 @@ jobs:
           sed -i '/CONFIG_PACKAGE_kmod-nft-queue/d' .config
           sed -i '/CONFIG_PACKAGE_kmod-nft-tproxy/d' .config
           sed -i '/CONFIG_PACKAGE_kmod-nfnetlink-queue/d' .config
+          sed -i '/CONFIG_PACKAGE_kmod-ipt-nfqueue/d' .config
           
           # 显式启用 (使用 =y 编译进固件，确保万无一失)
           echo "CONFIG_PACKAGE_kmod-nft-queue=y" >> .config
           echo "CONFIG_PACKAGE_kmod-nft-tproxy=y" >> .config
           echo "CONFIG_PACKAGE_kmod-nfnetlink-queue=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-ipt-nfqueue=y" >> .config
 
-          # 3. 自动修复依赖关系
-          # make defconfig 会读取上面的 .config，自动取消勾选依赖 ebtables 的包，
-          # 并自动勾选 kmod-nft-queue 所需的底层依赖。
           echo "🔄 Running make defconfig to fix dependencies..."
           make defconfig
-      # =======================================================
-      # 👆👆👆 修改结束 👆👆👆
-      # =======================================================
 
       - name: 📝 Generate config hash for cache
         id: config-hash
