@@ -98,10 +98,51 @@ jobs:
           cd openwrt
           $GITHUB_WORKSPACE/$DIY_P2_SH
 
+      # =======================================================
+      # 👇👇👇 这里是修改的核心部分 👇👇👇
+      # =======================================================
+      - name: 🔧 Customize Configuration (Fix ebtables & Enable UA3F)
+        run: |
+          cd openwrt
+          
+          echo "🔸 Processing .config modifications..."
+
+          # 1. 彻底移除 ebtables (解决编译报错)
+          # 先删除现有的配置行，防止 sed 替换遗漏
+          sed -i '/CONFIG_PACKAGE_ebtables/d' .config
+          sed -i '/CONFIG_PACKAGE_kmod-ebtables/d' .config
+          
+          # 显式禁用
+          echo "# CONFIG_PACKAGE_ebtables is not set" >> .config
+          echo "# CONFIG_PACKAGE_ebtables-nft is not set" >> .config
+          echo "# CONFIG_PACKAGE_ebtables-utils is not set" >> .config
+          echo "# CONFIG_PACKAGE_kmod-ebtables is not set" >> .config
+
+          # 2. 启用 UA3F 必须的内核模块
+          # 先清理旧配置
+          sed -i '/CONFIG_PACKAGE_kmod-nft-queue/d' .config
+          sed -i '/CONFIG_PACKAGE_kmod-nft-tproxy/d' .config
+          sed -i '/CONFIG_PACKAGE_kmod-nfnetlink-queue/d' .config
+          
+          # 显式启用 (使用 =y 编译进固件，确保万无一失)
+          echo "CONFIG_PACKAGE_kmod-nft-queue=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-nft-tproxy=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-nfnetlink-queue=y" >> .config
+
+          # 3. 自动修复依赖关系
+          # make defconfig 会读取上面的 .config，自动取消勾选依赖 ebtables 的包，
+          # 并自动勾选 kmod-nft-queue 所需的底层依赖。
+          echo "🔄 Running make defconfig to fix dependencies..."
+          make defconfig
+      # =======================================================
+      # 👆👆👆 修改结束 👆👆👆
+      # =======================================================
+
       - name: 📝 Generate config hash for cache
         id: config-hash
         run: |
           cd openwrt
+          # 注意：上面的步骤已经跑过 defconfig 了，这里再跑一次也是安全的
           make defconfig
           CONFIG_HASH=$(md5sum .config | awk '{print $1}')
           echo "hash=$CONFIG_HASH" >> $GITHUB_OUTPUT
