@@ -1,0 +1,121 @@
+name: OpenWrt Builder 128M Ubootmod (With UA3F)
+
+on:
+  workflow_dispatch:
+
+env:
+  CCACHE_DIR: /workdir/.ccache
+  CCACHE_MAXSIZE: 6G
+  REPO_URL: https://github.com/padavanonly/immortalwrt-mt798x-6.6
+  REPO_BRANCH: openwrt-24.10-6.6
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: 🙌 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🛠️ Init Environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo -E apt-get -qq update
+          sudo -E apt-get -qq install ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply python3-docutils python3-pyelftools qemu-utils re2c rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd
+          sudo mkdir -p /workdir
+          sudo chown $USER:$GROUPS /workdir
+
+      - name: 🪜 Clone Source
+        working-directory: /workdir
+        run: |
+          git clone $REPO_URL -b $REPO_BRANCH --single-branch --filter=blob:none openwrt
+          ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+      - name: ➕ Add UA3F Source
+        run: |
+          cd openwrt
+          # 克隆 UA3F 源码到 package 目录，这样 make menuconfig 就能看到它
+          git clone https://github.com/SunBK201/UA3F.git package/ua3f
+
+      - name: 🧬 Update & Install Feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 🧩 Load Configuration & Fix Dependencies
+        run: |
+          cd openwrt
+          # 如果你有自定义 config 文件，请取消下面注释并上传
+          # mv $GITHUB_WORKSPACE/config/128muboot.config .config
+          
+          # 如果没有自定义 config，这里生成默认配置 (针对 MT798x)
+          # 注意：你需要确认你的具体设备型号，这里假设是默认 target，如果不是，请先加载你的 config
+          # 为了演示，这里假设你已经有了一个 .config 或者使用默认
+          [ -e files ] && mv files openwrt/files
+
+          echo "🔧 Modifying .config..."
+          
+          # 1. 禁用 ebtables (解决编译报错)
+          sed -i '/CONFIG_PACKAGE_ebtables/d' .config
+          sed -i '/CONFIG_PACKAGE_kmod-ebtables/d' .config
+          echo "# CONFIG_PACKAGE_ebtables is not set" >> .config
+          echo "# CONFIG_PACKAGE_ebtables-nft is not set" >> .config
+          echo "# CONFIG_PACKAGE_ebtables-utils is not set" >> .config
+          echo "# CONFIG_PACKAGE_kmod-ebtables is not set" >> .config
+
+          # 2. 直接启用 UA3F (编译进固件)
+          # 这会自动触发 kmod-nft-queue 和 kmod-nft-tproxy 的选中
+          sed -i '/CONFIG_PACKAGE_ua3f/d' .config
+          echo "CONFIG_PACKAGE_ua3f=y" >> .config
+          
+          # 3. 强制选中依赖模块 (作为双重保险，设为 =y)
+          echo "CONFIG_PACKAGE_kmod-nft-queue=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-nft-tproxy=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-nfnetlink-queue=y" >> .config
+
+          # 4. 让 OpenWrt 自动计算并修复剩余依赖
+          make defconfig
+
+      - name: 📝 Check Config
+        run: |
+          cd openwrt
+          echo "🔍 Checking if UA3F is enabled:"
+          grep -i "ua3f" .config
+          echo "🔍 Checking if kmod-nft-queue is enabled:"
+          grep -i "nft-queue" .config
+
+      - name: 🕹️ Download Packages
+        run: |
+          cd openwrt
+          make download -j$(nproc)
+
+      - name: 🔮 Compile Firmware
+        id: compile
+        run: |
+          cd openwrt
+          echo "🔨 Compiling..."
+          make -j$(nproc) || make -j1 V=s
+          echo "status=success" >> $GITHUB_OUTPUT
+          
+          # 提取设备名和时间
+          grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
+          [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
+          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+
+      - name: ⌚ Organize Files
+        if: steps.compile.outputs.status == 'success'
+        run: |
+          cd openwrt/bin/targets/*/*
+          rm -rf packages
+          echo "FIRMWARE=$PWD" >> $GITHUB_ENV
+
+      - name: 📤 Upload Firmware
+        uses: actions/upload-artifact@v4
+        if: steps.compile.outputs.status == 'success'
+        with:
+          name: OpenWrt_UA3F_Integrated_${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+          path: ${{ env.FIRMWARE }}
