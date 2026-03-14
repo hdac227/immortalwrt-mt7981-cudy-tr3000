@@ -128,6 +128,7 @@ jobs:
           echo "CONFIG_PACKAGE_kmod-nft-tproxy=y" >> .config
           echo "CONFIG_PACKAGE_kmod-nfnetlink-queue=y" >> .config
           echo "CONFIG_PACKAGE_kmod-ipt-nfqueue=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-sched-bpf=y" >> .config
           echo "CONFIG_PACKAGE_iptables-mod-nfqueue=y" >> .config
 
           echo "🔄 Running make defconfig to fix dependencies..."
